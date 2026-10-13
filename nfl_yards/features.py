@@ -3,9 +3,9 @@ import pandas as pd
 
 # target -> (volume column, extra stat columns used as rolling features)
 TARGETS = {
-    "passing_yards": ("attempts", ["completions", "passing_air_yards", "passing_epa", "sacks_suffered", "rushing_yards"]),
-    "rushing_yards": ("carries", ["rushing_epa", "rushing_first_downs", "targets", "receiving_yards"]),
-    "receiving_yards": ("targets", ["receptions", "receiving_air_yards", "receiving_yards_after_catch", "target_share", "air_yards_share", "wopr", "carries"]),
+    "passing_yards": ("attempts", ["completions", "passing_air_yards", "passing_epa", "sacks_suffered", "rushing_yards", "offense_pct"]),
+    "rushing_yards": ("carries", ["rushing_epa", "rushing_first_downs", "targets", "receiving_yards", "offense_pct", "target_share", "carry_share"]),
+    "receiving_yards": ("targets", ["receptions", "receiving_air_yards", "receiving_yards_after_catch", "target_share", "air_yards_share", "wopr", "carries", "offense_pct"]),
 }
 MIN_AVG_VOLUME = {"attempts": 10, "carries": 3, "targets": 2}  # prior-game average needed to be modeled
 WINDOWS = (3, 8)
