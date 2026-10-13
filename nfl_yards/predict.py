@@ -9,6 +9,7 @@ import joblib
 import numpy as np
 import pandas as pd
 
+from . import probs
 from .data import load_all
 from .features import TARGETS, build
 from .train import MODELS_DIR
@@ -63,7 +64,10 @@ def predict(season: int | None = None, week: int | None = None) -> pd.DataFrame:
         df["pred_yards"] = np.clip(bundle["model"].predict(X), 0, None).round(1)
         df["recent_avg"] = df["baseline"].round(1)
         df["stat"] = target.replace("_yards", "")
-        out.append(df[["player_display_name", "position", "team", "opponent_team", "stat", "pred_yards", "recent_avg"]])
+        pbundle = joblib.load(MODELS_DIR / f"{target}_probs.joblib")
+        df = df.join(probs.predict(pbundle["model"], df, pbundle["features"], target))
+        keep = ["player_display_name", "position", "team", "opponent_team", "stat", "pred_yards", "recent_avg"]
+        out.append(df[keep + [c for c in df if c.startswith("p_")]])
     res = pd.concat(out, ignore_index=True)
     res.attrs["label"] = f"{season} week {week}"
     return res.rename(columns={"player_display_name": "player", "opponent_team": "opp"})
@@ -92,7 +96,11 @@ def main() -> None:
     print(f"Predictions for {res.attrs.get('label', '')}")
     for stat, g in res.groupby("stat", sort=False):
         print(f"\n== {stat} yards ==")
-        print(g.sort_values("pred_yards", ascending=False).head(args.top).drop(columns="stat").to_string(index=False))
+        g = g.sort_values("pred_yards", ascending=False).head(args.top).drop(columns="stat").dropna(axis=1, how="all")
+        pcols = [c for c in g if c.startswith("p_")]
+        g[pcols] = g[pcols].apply(lambda col: (col * 100).round().astype(int).astype(str) + "%")
+        g = g.rename(columns={c: c.replace("p_", "") + "+" for c in pcols})
+        print(g.to_string(index=False))
 
 
 if __name__ == "__main__":

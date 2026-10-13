@@ -21,3 +21,11 @@ uv run python -m nfl_yards.predict --csv preds.csv       # all players
 
 Re-downloads current stats and the nflverse schedule each run, so predictions use the latest completed games.
 Run `train` first to create `models/*.joblib` (they are not committed).
+
+## Threshold probabilities
+
+`predict` also prints the chance of reaching yardage thresholds (receiving/rushing 25, 40, 50, 60, 70, 80, 90, 100;
+passing 125, 150, ... 350). One classifier per yard type is trained on rows stacked across thresholds with a
+monotonic constraint, so probabilities never increase as the threshold rises. Edit `THRESHOLDS` in
+`nfl_yards/probs.py` to change the cutoffs, then `uv run python -m nfl_yards.train --probs-only`.
+Test-set log loss and calibration are in `models/report.json`.
