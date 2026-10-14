@@ -6,10 +6,9 @@ against that week's opponent, and runs the trained models on features built from
 import argparse
 
 import joblib
-import numpy as np
 import pandas as pd
 
-from . import probs
+from . import expected, probs
 from .data import load_all
 from .features import TARGETS, build
 from .train import MODELS_DIR
@@ -49,28 +48,43 @@ def placeholders(raw: pd.DataFrame, games: pd.DataFrame, season: int, week: int)
     return ph[~ph["player_id"].isin(already_played)]
 
 
-def predict(season: int | None = None, week: int | None = None) -> pd.DataFrame:
+def predict(season: int | None = None, week: int | None = None, model: str = "all") -> pd.DataFrame:
+    """Run the expected-yards model, the threshold-probability model, or both ("all")."""
     games, season, week = next_week(season, week)
     raw = load_all(refresh=True)
     full = pd.concat([raw, placeholders(raw, games, season, week)], ignore_index=True)
 
     out = []
     for target in TARGETS:
-        bundle = joblib.load(MODELS_DIR / f"{target}.joblib")
         df = build(full, target)
         df = df[(df["season"] == season) & (df["week"] == week) & df[target].isna()].copy()
-        X = df.reindex(columns=bundle["features"])
-        X[[c for c in X if c.startswith("pos_")]] = X[[c for c in X if c.startswith("pos_")]].fillna(0)
-        df["pred_yards"] = np.clip(bundle["model"].predict(X), 0, None).round(1)
+        cols = ["player_display_name", "position", "team", "opponent_team", "stat", "recent_avg"]
         df["recent_avg"] = df["baseline"].round(1)
         df["stat"] = target.replace("_yards", "")
-        pbundle = joblib.load(MODELS_DIR / f"{target}_probs.joblib")
-        df = df.join(probs.predict(pbundle["model"], df, pbundle["features"], target))
-        keep = ["player_display_name", "position", "team", "opponent_team", "stat", "pred_yards", "recent_avg"]
-        out.append(df[keep + [c for c in df if c.startswith("p_")]])
+        if model in ("expected", "all"):
+            bundle = joblib.load(MODELS_DIR / f"{target}_expected.joblib")
+            df["exp_yards"] = expected.predict(bundle["model"], _align(df, bundle["features"]), bundle["features"]).round(1)
+            cols.insert(5, "exp_yards")
+        if model in ("probs", "all"):
+            bundle = joblib.load(MODELS_DIR / f"{target}_probs.joblib")
+            p = probs.predict(bundle["model"], _align(df, bundle["features"]), bundle["features"], target)
+            df = df.join(p)
+            cols += list(p.columns)
+        out.append(df[cols])
     res = pd.concat(out, ignore_index=True)
     res.attrs["label"] = f"{season} week {week}"
     return res.rename(columns={"player_display_name": "player", "opponent_team": "opp"})
+
+
+def _align(df: pd.DataFrame, feats: list[str]) -> pd.DataFrame:
+    """Add any position dummies the model was trained with but this week's players lack."""
+    missing = [c for c in feats if c not in df and c.startswith("pos_")]
+    return df.assign(**{c: 0.0 for c in missing})
+
+
+def sort_col(df: pd.DataFrame) -> str:
+    """Sort by expected yards, or by the lowest threshold's probability when only probabilities were run."""
+    return "exp_yards" if "exp_yards" in df else next(c for c in df if c.startswith("p_") and df[c].notna().any())
 
 
 def main() -> None:
@@ -81,12 +95,14 @@ def main() -> None:
     ap.add_argument("--player", help="case-insensitive name substring filter")
     ap.add_argument("--team", help="team abbreviation filter, e.g. KC")
     ap.add_argument("--top", type=int, default=15, help="rows per stat (default 15)")
+    ap.add_argument("--model", choices=["expected", "probs", "all"], default="all",
+                    help="expected yards, threshold probabilities, or both (default)")
     ap.add_argument("--csv", help="write all predictions to this path")
     args = ap.parse_args()
 
-    res = predict(args.season, args.week)
+    res = predict(args.season, args.week, args.model)
     if args.csv:
-        res.sort_values(["stat", "pred_yards"], ascending=[True, False]).to_csv(args.csv, index=False)
+        res.sort_values(["stat", sort_col(res)], ascending=[True, False]).to_csv(args.csv, index=False)
     if args.stat:
         res = res[res["stat"] == args.stat]
     if args.player:
@@ -96,7 +112,7 @@ def main() -> None:
     print(f"Predictions for {res.attrs.get('label', '')}")
     for stat, g in res.groupby("stat", sort=False):
         print(f"\n== {stat} yards ==")
-        g = g.sort_values("pred_yards", ascending=False).head(args.top).drop(columns="stat").dropna(axis=1, how="all")
+        g = g.sort_values(sort_col(g), ascending=False).head(args.top).drop(columns="stat").dropna(axis=1, how="all")
         pcols = [c for c in g if c.startswith("p_")]
         g[pcols] = g[pcols].apply(lambda col: (col * 100).round().astype(int).astype(str) + "%")
         g = g.rename(columns={c: c.replace("p_", "") + "+" for c in pcols})

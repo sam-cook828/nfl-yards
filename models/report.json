@@ -1,11 +1,16 @@
 {
   "passing_yards": {
-    "n_train": 4440,
-    "n_test": 777,
-    "best_iter": 150,
-    "test_mae": 64.52,
-    "baseline_mae": 70.17,
-    "improvement_pct": 8.0,
+    "expected_yards": {
+      "n_train": 4440,
+      "n_test": 777,
+      "best_iter": 76,
+      "test_rmse": 82.79,
+      "baseline_rmse": 89.09,
+      "test_mae": 65.53,
+      "baseline_mae": 70.17,
+      "mean_bias": 6.76,
+      "rmse_improvement_pct": 7.1
+    },
     "probabilities": {
       "best_iter": 208,
       "log_loss": 0.4558,
@@ -67,12 +72,17 @@
     }
   },
   "rushing_yards": {
-    "n_train": 10784,
-    "n_test": 1874,
-    "best_iter": 250,
-    "test_mae": 20.47,
-    "baseline_mae": 22.47,
-    "improvement_pct": 8.9,
+    "expected_yards": {
+      "n_train": 10784,
+      "n_test": 1874,
+      "best_iter": 71,
+      "test_rmse": 28.92,
+      "baseline_rmse": 30.19,
+      "test_mae": 21.35,
+      "baseline_mae": 22.47,
+      "mean_bias": -0.12,
+      "rmse_improvement_pct": 4.2
+    },
     "probabilities": {
       "best_iter": 118,
       "log_loss": 0.3792,
@@ -134,12 +144,17 @@
     }
   },
   "receiving_yards": {
-    "n_train": 25752,
-    "n_test": 4097,
-    "best_iter": 150,
-    "test_mae": 20.2,
-    "baseline_mae": 21.84,
-    "improvement_pct": 7.5,
+    "expected_yards": {
+      "n_train": 25752,
+      "n_test": 4097,
+      "best_iter": 73,
+      "test_rmse": 27.83,
+      "baseline_rmse": 28.82,
+      "test_mae": 21.16,
+      "baseline_mae": 21.84,
+      "mean_bias": 1.34,
+      "rmse_improvement_pct": 3.4
+    },
     "probabilities": {
       "best_iter": 222,
       "log_loss": 0.3659,
