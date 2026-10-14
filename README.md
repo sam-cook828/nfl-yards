@@ -44,7 +44,7 @@ All data comes from [nflverse](https://github.com/nflverse), downloaded as CSV a
 |---|---|
 | `stats_player_week_{year}.csv` (`stats_player` release) | Per-player, per-game box score stats: yards, attempts, carries, targets, EPA, air yards, target share, WOPR, etc. Regular season only, 2016 to present. |
 | `snap_counts_{year}.csv` (`snap_counts` release) | Offensive snap share per player-game. Joined to the stats via `players.csv`, which maps PFR ids to GSIS ids. |
-| `games.csv` (`nfldata` repo) | The schedule. Used only by `predict` to find the next unplayed week and each team's opponent. |
+| `games.csv` (`nfldata` repo) | The schedule and closing Vegas lines (spread and over/under total) for every game. `predict` also uses it to find the next unplayed week and each team's opponent. |
 
 Each row is one player in one game. Only players with meaningful recent usage are modeled: a prior 8-game
 average of at least 10 pass attempts (passing), 3 carries (rushing) or 2 targets (receiving).
@@ -63,7 +63,7 @@ has its own section in `models/report.json`.
 
 ### Features (`nfl_yards/features.py`)
 
-All features use only games **before** the one being predicted, so there is no leakage from the game itself.
+All features use only information available **before** kickoff, so there is no leakage from the game itself.
 
 - **Player form:** rolling 3-game and 8-game averages and the career average of yards and of volume (attempts,
   carries or targets), plus yard-type-specific stats such as EPA, air yards, first downs, receptions and sacks.
@@ -71,6 +71,9 @@ All features use only games **before** the one being predicted, so there is no l
   each as rolling averages.
 - **Consistency:** the last game's yards, the 8-game standard deviation, and games played.
 - **Opponent:** rolling 3- and 8-game average of that yard type allowed by the opposing defense.
+- **Vegas lines:** the team's point spread, the game's over/under total, each team's implied points
+  (derived from the spread and total) and home/away. Lines capture expected game script: a big favorite tends to
+  run more late, and a team expected to trail tends to pass more.
 - **Other:** position and week of the season.
 
 ### Expected yards (`nfl_yards/expected.py`)
@@ -94,17 +97,17 @@ refit on both. Seasons after 2024 (2025 and the 2026 weeks played so far) are th
 
 | Yard type | RMSE model | RMSE baseline | MAE model | MAE baseline |
 |---|---|---|---|---|
-| Passing | 82.8 | 89.1 | 65.5 | 70.2 |
-| Rushing | 28.9 | 30.2 | 21.4 | 22.5 |
-| Receiving | 27.8 | 28.8 | 21.2 | 21.8 |
+| Passing | 82.0 | 89.1 | 64.8 | 70.2 |
+| Rushing | 28.9 | 30.2 | 21.3 | 22.5 |
+| Receiving | 27.8 | 28.8 | 21.0 | 21.8 |
 
 **Threshold probabilities vs. the historical base rate for each threshold (log loss, lower is better):**
 
 | Yard type | Model | Base rate |
 |---|---|---|
-| Passing | 0.456 | 0.518 |
-| Rushing | 0.379 | 0.481 |
-| Receiving | 0.366 | 0.442 |
+| Passing | 0.448 | 0.518 |
+| Rushing | 0.378 | 0.481 |
+| Receiving | 0.364 | 0.442 |
 
 The probabilities are well calibrated: across the test set, outcomes predicted at 30% happen about 25-35% of the
 time, and similarly across other probability ranges. Full metrics, including the calibration tables, are in
@@ -113,8 +116,11 @@ time, and similarly across other probability ranges. Full metrics, including the
 ## Limitations
 
 - Weekly yardage is noisy. The gain over a rolling average is modest, and individual predictions can miss widely.
-- The model does not see injuries, depth charts, Vegas lines, weather or home/away, so a backup who is about to
-  start, or a star who is out, will be mispredicted.
+- The model does not see injuries, depth charts or weather, so a backup who is about to start, or a star who is
+  out, will be mispredicted.
+- Vegas lines for upcoming games appear in the schedule about a week ahead. Predicting further out leaves them
+  missing, which the models handle but with less accuracy.
+- The expected-yards model runs about 8 yards high on passing in the test seasons.
 - `predict` uses the saved models and does not retrain. Retrain after new seasons accumulate
   (`uv run python -m nfl_yards.train --val-season <year>`).
 - The two models are trained separately, so they can disagree slightly (e.g. expected yards above the 50% point
@@ -123,7 +129,7 @@ time, and similarly across other probability ranges. Full metrics, including the
 ## Layout
 
 ```
-nfl_yards/data.py       download and cache nflverse data, merge snap counts
+nfl_yards/data.py       download and cache nflverse data, merge snap counts and Vegas lines
 nfl_yards/features.py   leak-free rolling features and opponent strength
 nfl_yards/train.py      train either or both models, write models/report.json
 nfl_yards/expected.py   expected-yards model

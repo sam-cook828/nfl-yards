@@ -9,6 +9,8 @@ TARGETS = {
 }
 MIN_AVG_VOLUME = {"attempts": 10, "carries": 3, "targets": 2}  # prior-game average needed to be modeled
 WINDOWS = (3, 8)
+# known before kickoff, so used as-is (no lagging)
+GAME_CONTEXT = ["is_home", "team_spread", "total_line", "team_implied", "opp_implied"]
 
 
 def _roll(g: pd.core.groupby.DataFrameGroupBy, col: str, w: int) -> pd.Series:
@@ -50,6 +52,6 @@ def build(df: pd.DataFrame, target: str) -> pd.DataFrame:
 def feature_cols(df: pd.DataFrame, target: str) -> list[str]:
     vol, extras = TARGETS[target]
     base = [f"{c}_{s}" for c in [target, vol, *extras] for s in ("r3", "r8", "career")]
-    return base + ["games_prior", "last_game_yards", "yards_std_8", "opp_allowed_3", "opp_allowed_8", "week_num"] + [
+    return base + ["games_prior", "last_game_yards", "yards_std_8", "opp_allowed_3", "opp_allowed_8", "week_num", *GAME_CONTEXT] + [
         c for c in df.columns if c.startswith("pos_")
     ]

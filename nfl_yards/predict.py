@@ -9,19 +9,17 @@ import joblib
 import pandas as pd
 
 from . import expected, probs
-from .data import load_all
+from .data import load_all, load_schedule, vegas_lines
 from .features import TARGETS, build
 from .train import MODELS_DIR
 
-SCHEDULE_URL = "https://raw.githubusercontent.com/nflverse/nfldata/master/data/games.csv"
 ID_COLS = ["player_id", "player_name", "player_display_name", "position", "position_group", "season", "week",
            "season_type", "team", "opponent_team"]
 
 
 def next_week(season: int | None, week: int | None) -> tuple[pd.DataFrame, int, int]:
     """Unplayed games for the requested (or next) week."""
-    sched = pd.read_csv(SCHEDULE_URL)
-    sched = sched[sched["game_type"] == "REG"]
+    sched = load_schedule(refresh=True)
     unplayed = sched[sched["home_score"].isna()]
     if season is None:
         season = int(unplayed["season"].min())
@@ -45,6 +43,7 @@ def placeholders(raw: pd.DataFrame, games: pd.DataFrame, season: int, week: int)
     ph["season"], ph["week"], ph["season_type"] = season, week, "REG"
     ph["opponent_team"] = ph["team"].map(opp)
     already_played = raw[(raw["season"] == season) & (raw["week"] == week)]["player_id"]
+    ph = ph.merge(vegas_lines(games), on=["season", "week", "team"], how="left")
     return ph[~ph["player_id"].isin(already_played)]
 
 

@@ -6,6 +6,8 @@ import pandas as pd
 URL = "https://github.com/nflverse/nflverse-data/releases/download/stats_player/stats_player_week_{year}.csv"
 SNAP_URL = "https://github.com/nflverse/nflverse-data/releases/download/snap_counts/snap_counts_{year}.csv"
 PLAYERS_URL = "https://github.com/nflverse/nflverse-data/releases/download/players/players.csv"
+SCHEDULE_URL = "https://raw.githubusercontent.com/nflverse/nfldata/master/data/games.csv"
+TEAM_FIXES = {"OAK": "LV", "SD": "LAC", "STL": "LA"}  # schedule uses historical codes, stats use current ones
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 
 
@@ -50,10 +52,37 @@ def load_snaps(start: int, end: int, refresh: bool = False) -> pd.DataFrame:
             .rename(columns={"gsis_id": "player_id"}))
 
 
+def load_schedule(refresh: bool = False) -> pd.DataFrame:
+    sched = _cached(SCHEDULE_URL, "schedule", refresh)
+    sched = sched[sched["game_type"] == "REG"].copy()
+    for c in ("home_team", "away_team"):
+        sched[c] = sched[c].replace(TEAM_FIXES)
+    return sched
+
+
+def vegas_lines(sched: pd.DataFrame) -> pd.DataFrame:
+    """One row per team-game with pre-game betting lines from that team's point of view.
+
+    nflverse `spread_line` is the home team's expected margin (positive = home favored).
+    """
+    rows = []
+    for side, sign in (("home", 1), ("away", -1)):
+        t = pd.DataFrame({"season": sched["season"], "week": sched["week"], "team": sched[f"{side}_team"]})
+        t["is_home"] = float(sign == 1)
+        t["team_spread"] = sign * sched["spread_line"]
+        t["total_line"] = sched["total_line"]
+        rows.append(t)
+    lines = pd.concat(rows, ignore_index=True)
+    lines["team_implied"] = (lines["total_line"] + lines["team_spread"]) / 2
+    lines["opp_implied"] = (lines["total_line"] - lines["team_spread"]) / 2
+    return lines
+
+
 def load_all(start: int = 2016, end: int = 2026, refresh: bool = False) -> pd.DataFrame:
     frames = [f for y in range(start, end + 1) if (f := load_season(y, refresh)) is not None]
     df = pd.concat(frames, ignore_index=True)
     df = df[df["season_type"] == "REG"].sort_values(["season", "week"]).reset_index(drop=True)
     df = df.merge(load_snaps(start, end, refresh), on=["player_id", "season", "week"], how="left")
     df["carry_share"] = df["carries"] / df.groupby(["season", "week", "team"])["carries"].transform("sum")
+    df = df.merge(vegas_lines(load_schedule(refresh)), on=["season", "week", "team"], how="left")
     return df
