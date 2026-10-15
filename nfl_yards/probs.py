@@ -3,6 +3,10 @@
 One classifier per yard type is trained on rows stacked across thresholds (a `threshold` feature, label
 yards >= threshold). The threshold features carry a decreasing monotonic constraint, so P(>=50) can never
 fall below P(>=60).
+
+The model is trained on a fine grid of thresholds (`GRID`) so it can answer for any line, e.g. a sportsbook's
+92.5 (`prob_over`, interpolating between grid points). `THRESHOLDS` are the ones shown in reports, and test
+metrics are scored on those.
 """
 import numpy as np
 import pandas as pd
@@ -14,13 +18,18 @@ THRESHOLDS = {
     "rushing_yards": [25, 40, 50, 60, 70, 80, 90, 100],
     "receiving_yards": [25, 40, 50, 60, 70, 80, 90, 100],
 }
+GRID = {
+    "passing_yards": list(range(100, 401, 25)),
+    "rushing_yards": list(range(5, 151, 5)),
+    "receiving_yards": list(range(5, 151, 5)),
+}
 
 
 def stack(df: pd.DataFrame, feats: list[str], target: str, thresholds: list[int]) -> pd.DataFrame:
     """One copy of the feature rows per threshold, plus the threshold and its gap to recent form."""
     parts = []
     for t in thresholds:
-        x = df[feats].copy()
+        x = df[feats].astype("float32")
         x["threshold"] = t
         x["thr_minus_r8"] = t - df[f"{target}_r8"]
         parts.append(x)
@@ -40,15 +49,17 @@ def make_model(columns: list[str], n_iter: int) -> HistGradientBoostingClassifie
 
 def fit(tr, va, te, feats, target):
     """Pick boosting rounds on `va`, refit on tr+va, score on `te` against base-rate-by-threshold."""
-    th = THRESHOLDS[target]
-    Xtr, ytr = stack(tr, feats, target, th), labels(tr, target, th)
-    Xva, yva = stack(va, feats, target, th), labels(va, target, th)
-    probe = make_model(list(Xtr.columns), 400).fit(Xtr, ytr)
+    th, grid = THRESHOLDS[target], GRID[target]
+    Xtr, ytr = stack(tr, feats, target, grid), labels(tr, target, grid)
+    Xva, yva = stack(va, feats, target, grid), labels(va, target, grid)
+    columns = list(Xtr.columns)
+    probe = make_model(columns, 400).fit(Xtr, ytr)
+    del Xtr
     losses = [log_loss(yva, p[:, 1]) for p in probe.staged_predict_proba(Xva)]
     best_n = int(np.argmin(losses)) + 1
 
     trva = pd.concat([tr, va])
-    final = make_model(list(Xtr.columns), best_n).fit(stack(trva, feats, target, th), labels(trva, target, th))
+    final = make_model(columns, best_n).fit(stack(trva, feats, target, grid), labels(trva, target, grid))
     Xte, yte = stack(te, feats, target, th), labels(te, target, th)
     p = final.predict_proba(Xte)[:, 1]
     base = np.concatenate([np.full(len(te), (trva[target] >= t).mean()) for t in th])
@@ -66,3 +77,15 @@ def predict(model, df: pd.DataFrame, feats: list[str], target: str) -> pd.DataFr
     th = THRESHOLDS[target]
     p = model.predict_proba(stack(df, feats, target, th)[list(model.feature_names_in_)])[:, 1]
     return pd.DataFrame(p.reshape(len(th), len(df)).T, index=df.index, columns=[f"p_{t}" for t in th])
+
+
+def prob_over(model, df: pd.DataFrame, feats: list[str], target: str, lines: pd.Series) -> np.ndarray:
+    """P(yards > line) for each row's own line, interpolated between grid thresholds.
+
+    Yards are whole numbers, so over 92.5 means at least 93.
+    """
+    grid = GRID[target]
+    p = model.predict_proba(stack(df, feats, target, grid)[list(model.feature_names_in_)])[:, 1]
+    p = p.reshape(len(grid), len(df)).T
+    need = np.floor(lines.to_numpy(dtype=float)) + 1
+    return np.array([np.interp(n, grid, row) if np.isfinite(n) else np.nan for n, row in zip(need, p)])
