@@ -21,6 +21,7 @@ def main() -> None:
     ap.add_argument("--val-season", type=int, default=2024, help="tuning season; later seasons are the test set")
     ap.add_argument("--refresh", action="store_true")
     ap.add_argument("--model", choices=["expected", "probs", "all"], default="all", help="which model to train")
+    ap.add_argument("--target", choices=list(TARGETS), help="only this yard type (default: all)")
     args = ap.parse_args()
 
     raw = load_all(refresh=args.refresh)
@@ -29,7 +30,7 @@ def main() -> None:
     report_path = MODELS_DIR / "report.json"
     report = json.loads(report_path.read_text()) if report_path.exists() else {}
 
-    for target in TARGETS:
+    for target in [args.target] if args.target else TARGETS:
         df = build(raw, target)
         feats = feature_cols(df, target)
         tr, va, te = df[df.season < args.val_season], df[df.season == args.val_season], df[df.season > args.val_season]

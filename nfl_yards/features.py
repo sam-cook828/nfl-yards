@@ -1,6 +1,8 @@
 """Leak-free feature engineering: every feature uses only games before the one being predicted."""
 import pandas as pd
 
+from . import coverage
+
 # target -> (volume column, extra stat columns used as rolling features)
 TARGETS = {
     "passing_yards": ("attempts", ["completions", "passing_air_yards", "passing_epa", "sacks_suffered", "rushing_yards", "offense_pct"]),
@@ -44,6 +46,8 @@ def build(df: pd.DataFrame, target: str) -> pd.DataFrame:
     df = pd.concat([df, pd.get_dummies(df["position"], prefix="pos", dtype=float)], axis=1)
     df["week_num"] = df["week"]
     df["baseline"] = df[f"{target}_r8"]
+    if target == "receiving_yards":
+        df = coverage.add_features(df)
 
     df = df[df[f"{vol}_r8"] >= MIN_AVG_VOLUME[vol]].dropna(subset=[f"{target}_r8"])
     return df
@@ -54,4 +58,4 @@ def feature_cols(df: pd.DataFrame, target: str) -> list[str]:
     base = [f"{c}_{s}" for c in [target, vol, *extras] for s in ("r3", "r8", "career")]
     return base + ["games_prior", "last_game_yards", "yards_std_8", "opp_allowed_3", "opp_allowed_8", "week_num", *GAME_CONTEXT] + [
         c for c in df.columns if c.startswith("pos_")
-    ]
+    ] + (coverage.FEATURES if target == "receiving_yards" else [])
