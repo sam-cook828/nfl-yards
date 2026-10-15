@@ -82,6 +82,12 @@ A scikit-learn `HistGradientBoostingRegressor` with squared-error loss, so it pr
 yardage. Yardage is right-skewed (occasional big games), so the expected value sits above the most likely
 outcome. For the most likely range, use the threshold probabilities.
 
+The trees alone pull the best players too far toward the middle (receivers in the top 2% by recent form came out
+7.5 yards low) and ran 8 yards high on passing. A linear calibration step fixes most of this: it blends the tree
+prediction with the player's 8-game average, with weights learned from out-of-sample predictions over the five
+seasons before the test set (each season predicted by a model trained only on earlier seasons). The learned
+weights are in `models/report.json` under `calibration`.
+
 ### Threshold probabilities (`nfl_yards/probs.py`)
 
 A `HistGradientBoostingClassifier` per yard type. Every player-game is repeated once per threshold, with a label of
@@ -97,9 +103,12 @@ refit on both. Seasons after 2024 (2025 and the 2026 weeks played so far) are th
 
 | Yard type | RMSE model | RMSE baseline | MAE model | MAE baseline |
 |---|---|---|---|---|
-| Passing | 82.0 | 89.1 | 64.8 | 70.2 |
-| Rushing | 28.9 | 30.2 | 21.3 | 22.5 |
-| Receiving | 27.8 | 28.8 | 21.0 | 21.8 |
+| Passing | 81.7 | 89.1 | 64.7 | 70.2 |
+| Rushing | 28.9 | 30.2 | 21.2 | 22.5 |
+| Receiving | 27.7 | 28.8 | 20.8 | 21.8 |
+
+Average bias (prediction minus actual), before and after calibration: passing +8.1 → +1.5 yards overall;
+receiving's top 2% by recent form −7.5 → −3.1.
 
 **Threshold probabilities vs. the historical base rate for each threshold (log loss, lower is better):**
 
@@ -120,7 +129,10 @@ time, and similarly across other probability ranges. Full metrics, including the
   out, will be mispredicted.
 - Vegas lines for upcoming games appear in the schedule about a week ahead. Predicting further out leaves them
   missing, which the models handle but with less accuracy.
-- The expected-yards model runs about 8 yards high on passing in the test seasons.
+- The very top of the range is still uncertain: there are only a few dozen test games per yard type for the
+  top 2% of players, and the calibration still leaves elite receivers about 3 yards low.
+- Calibration gives some weight to recent averages, so a backup with a strong average from spot duty (or a
+  starter who may not play) can get a misleading projection. Check who is starting.
 - `predict` uses the saved models and does not retrain. Retrain after new seasons accumulate
   (`uv run python -m nfl_yards.train --val-season <year>`).
 - The two models are trained separately, so they can disagree slightly (e.g. expected yards above the 50% point
