@@ -26,8 +26,8 @@ uv run python -m nfl_yards.predict --csv preds.csv          # write every player
 ```
 
 Each run re-downloads the latest stats and schedule, so features reflect all completed games. Output per player:
-expected yards (`exp_yards`), their recent 8-game average (`recent_avg`), and the probability of reaching each
-threshold:
+expected yards (`exp_yards`) with a High / Medium / Low `confidence` label, their recent 8-game average
+(`recent_avg`), and the probability of reaching each threshold:
 
 | Yard type | Thresholds |
 |---|---|
@@ -87,6 +87,20 @@ The trees alone pull the best players too far toward the middle (receivers in th
 prediction with the player's 8-game average, with weights learned from out-of-sample predictions over the five
 seasons before the test set (each season predicted by a model trained only on earlier seasons). The learned
 weights are in `models/report.json` under `calibration`.
+
+**Confidence labels.** Each expected-yards prediction carries a High / Medium / Low label. A second model learns
+the calibrated prediction's expected absolute miss from the same out-of-sample errors, and the miss is divided by
+the projection. The labels split past predictions into equal thirds, High being the smallest relative miss.
+On the test set, the average miss as a share of the projection:
+
+| Yard type | High | Medium | Low |
+|---|---|---|---|
+| Passing | 25% | 28% | 40% |
+| Rushing | 44% | 61% | 79% |
+| Receiving | 52% | 65% | 77% |
+
+The label is about relative accuracy. High-volume players get more High labels but still miss by more yards in
+absolute terms, because they gain more yards.
 
 ### Threshold probabilities (`nfl_yards/probs.py`)
 

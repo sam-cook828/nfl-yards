@@ -62,8 +62,9 @@ def predict(season: int | None = None, week: int | None = None, model: str = "al
         df["stat"] = target.replace("_yards", "")
         if model in ("expected", "all"):
             bundle = joblib.load(MODELS_DIR / f"{target}_expected.joblib")
-            df["exp_yards"] = expected.predict(bundle["model"], _align(df, bundle["features"]), bundle["features"]).round(1)
-            cols.insert(5, "exp_yards")
+            exp, conf = expected.predict(bundle["model"], _align(df, bundle["features"]), bundle["features"])
+            df["exp_yards"], df["confidence"] = exp.round(1), conf
+            cols[5:5] = ["exp_yards", "confidence"]
         if model in ("probs", "all"):
             bundle = joblib.load(MODELS_DIR / f"{target}_probs.joblib")
             p = probs.predict(bundle["model"], _align(df, bundle["features"]), bundle["features"], target)

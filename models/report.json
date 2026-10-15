@@ -21,6 +21,26 @@
       "test_mae": 64.69,
       "mean_bias": 1.51,
       "top2pct_bias": 29.98,
+      "confidence": {
+        "High": {
+          "n": 189,
+          "share": 0.243,
+          "mae": 61.69,
+          "relative_miss": 0.25
+        },
+        "Medium": {
+          "n": 305,
+          "share": 0.393,
+          "mae": 59.33,
+          "relative_miss": 0.275
+        },
+        "Low": {
+          "n": 283,
+          "share": 0.364,
+          "mae": 72.47,
+          "relative_miss": 0.396
+        }
+      },
       "rmse_improvement_pct": 8.3
     },
     "probabilities": {
@@ -105,6 +125,26 @@
       "test_mae": 21.15,
       "mean_bias": -0.26,
       "top2pct_bias": 11.02,
+      "confidence": {
+        "High": {
+          "n": 595,
+          "share": 0.318,
+          "mae": 27.53,
+          "relative_miss": 0.442
+        },
+        "Medium": {
+          "n": 672,
+          "share": 0.359,
+          "mae": 19.15,
+          "relative_miss": 0.614
+        },
+        "Low": {
+          "n": 607,
+          "share": 0.324,
+          "mae": 17.11,
+          "relative_miss": 0.785
+        }
+      },
       "rmse_improvement_pct": 4.4
     },
     "probabilities": {
@@ -189,6 +229,26 @@
       "test_mae": 20.84,
       "mean_bias": 0.57,
       "top2pct_bias": -3.1,
+      "confidence": {
+        "High": {
+          "n": 1339,
+          "share": 0.327,
+          "mae": 27.54,
+          "relative_miss": 0.515
+        },
+        "Medium": {
+          "n": 1345,
+          "share": 0.328,
+          "mae": 18.1,
+          "relative_miss": 0.647
+        },
+        "Low": {
+          "n": 1413,
+          "share": 0.345,
+          "mae": 17.1,
+          "relative_miss": 0.771
+        }
+      },
       "rmse_improvement_pct": 3.9
     },
     "probabilities": {
