@@ -8,7 +8,7 @@ import argparse
 import joblib
 import pandas as pd
 
-from . import expected, probs
+from . import expected, injuries, probs
 from .data import load_all, load_schedule, vegas_lines
 from .features import TARGETS, build
 from .train import MODELS_DIR
@@ -52,12 +52,15 @@ def predict(season: int | None = None, week: int | None = None, model: str = "al
     games, season, week = next_week(season, week)
     raw = load_all(refresh=True)
     full = pd.concat([raw, placeholders(raw, games, season, week)], ignore_index=True)
+    injuries.load(season, season, refresh_season=season)  # this week's report, fetched fresh
 
     out = []
     for target in TARGETS:
         df = build(full, target)
         df = df[(df["season"] == season) & (df["week"] == week) & df[target].isna()].copy()
-        cols = ["player_display_name", "position", "team", "opponent_team", "stat", "recent_avg"]
+        df = df[df["inj_status"] < injuries.STATUS["Out"]]  # ruled out: not playing
+        df["status"] = df["inj_status"].map({1: "Questionable", 2: "Doubtful"}).fillna("")
+        cols = ["player_display_name", "position", "team", "opponent_team", "status", "stat", "recent_avg"]
         df["recent_avg"] = df["baseline"].round(1)
         df["stat"] = target.replace("_yards", "")
         if model in ("expected", "all"):

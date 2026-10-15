@@ -41,14 +41,16 @@ def _cached(url: str, name: str, refresh: bool, **kw) -> pd.DataFrame | None:
 
 
 def load_snaps(start: int, end: int, refresh: bool = False) -> pd.DataFrame:
-    """Offensive snap share per player-week, keyed by gsis id (the id used in the stats files)."""
+    """Offensive and defensive snap share per player-week, keyed by gsis id (the id used in the stats files)."""
     ids = _cached(PLAYERS_URL, "players", refresh, usecols=["gsis_id", "pfr_id"]).dropna()
     frames = [f for y in range(start, end + 1)
-              if (f := _cached(SNAP_URL.format(year=y), f"snap_counts_{y}", refresh,
-                               usecols=["season", "week", "game_type", "pfr_player_id", "offense_pct"])) is not None]
+              if (f := _cached(SNAP_URL.format(year=y), f"snap_counts_v2_{y}", refresh,
+                               usecols=["season", "week", "game_type", "pfr_player_id", "team",
+                                        "offense_pct", "defense_pct"])) is not None]
     snaps = pd.concat(frames, ignore_index=True)
     snaps = snaps[snaps["game_type"] == "REG"].merge(ids, left_on="pfr_player_id", right_on="pfr_id")
-    return (snaps.groupby(["gsis_id", "season", "week"], as_index=False)["offense_pct"].max()
+    return (snaps.groupby(["gsis_id", "season", "week"], as_index=False)
+            .agg(team=("team", "last"), offense_pct=("offense_pct", "max"), defense_pct=("defense_pct", "max"))
             .rename(columns={"gsis_id": "player_id"}))
 
 
@@ -82,7 +84,8 @@ def load_all(start: int = 2016, end: int = 2026, refresh: bool = False) -> pd.Da
     frames = [f for y in range(start, end + 1) if (f := load_season(y, refresh)) is not None]
     df = pd.concat(frames, ignore_index=True)
     df = df[df["season_type"] == "REG"].sort_values(["season", "week"]).reset_index(drop=True)
-    df = df.merge(load_snaps(start, end, refresh), on=["player_id", "season", "week"], how="left")
+    snaps = load_snaps(start, end, refresh)[["player_id", "season", "week", "offense_pct"]]
+    df = df.merge(snaps, on=["player_id", "season", "week"], how="left")
     df["carry_share"] = df["carries"] / df.groupby(["season", "week", "team"])["carries"].transform("sum")
     df = df.merge(vegas_lines(load_schedule(refresh)), on=["season", "week", "team"], how="left")
     return df

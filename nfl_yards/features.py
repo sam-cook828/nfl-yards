@@ -1,7 +1,7 @@
 """Leak-free feature engineering: every feature uses only games before the one being predicted."""
 import pandas as pd
 
-from . import coverage
+from . import coverage, injuries
 
 # target -> (volume column, extra stat columns used as rolling features)
 TARGETS = {
@@ -29,7 +29,7 @@ def _opp_allowed(df: pd.DataFrame, target: str) -> pd.DataFrame:
     return t.drop(columns=target)
 
 
-def build(df: pd.DataFrame, target: str) -> pd.DataFrame:
+def build(df: pd.DataFrame, target: str, refresh_injuries: int | None = None) -> pd.DataFrame:
     vol, extras = TARGETS[target]
     df = df.sort_values(["player_id", "season", "week"]).copy()
     g = df.groupby("player_id")
@@ -48,6 +48,7 @@ def build(df: pd.DataFrame, target: str) -> pd.DataFrame:
     df["baseline"] = df[f"{target}_r8"]
     if target == "receiving_yards":
         df = coverage.add_features(df)
+    df = injuries.add_features(df, refresh_injuries)
 
     df = df[df[f"{vol}_r8"] >= MIN_AVG_VOLUME[vol]].dropna(subset=[f"{target}_r8"])
     return df
@@ -58,4 +59,4 @@ def feature_cols(df: pd.DataFrame, target: str) -> list[str]:
     base = [f"{c}_{s}" for c in [target, vol, *extras] for s in ("r3", "r8", "career")]
     return base + ["games_prior", "last_game_yards", "yards_std_8", "opp_allowed_3", "opp_allowed_8", "week_num", *GAME_CONTEXT] + [
         c for c in df.columns if c.startswith("pos_")
-    ] + (coverage.FEATURES if target == "receiving_yards" else [])
+    ] + (coverage.FEATURES if target == "receiving_yards" else []) + injuries.FEATURES

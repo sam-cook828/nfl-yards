@@ -25,7 +25,8 @@ uv run python -m nfl_yards.predict --model probs            # threshold probabil
 uv run python -m nfl_yards.predict --csv preds.csv          # write every player to a file
 ```
 
-Each run re-downloads the latest stats and schedule, so features reflect all completed games. Output per player:
+Each run re-downloads the latest stats, schedule and injury report, so features reflect all completed games and
+the current report. Players ruled Out are left out, and Questionable or Doubtful players are flagged in `status`. Output per player:
 expected yards (`exp_yards`) with a High / Medium / Low `confidence` label, their recent 8-game average
 (`recent_avg`), and the probability of reaching each threshold:
 
@@ -44,6 +45,7 @@ All data comes from [nflverse](https://github.com/nflverse), downloaded as CSV a
 |---|---|
 | `stats_player_week_{year}.csv` (`stats_player` release) | Per-player, per-game box score stats: yards, attempts, carries, targets, EPA, air yards, target share, WOPR, etc. Regular season only, 2016 to present. |
 | `snap_counts_{year}.csv` (`snap_counts` release) | Offensive snap share per player-game. Joined to the stats via `players.csv`, which maps PFR ids to GSIS ids. |
+| `injuries_{year}.csv` (`injuries` release) | Weekly injury reports: game status (Questionable, Doubtful, Out) and practice participation, 2016 to present. |
 | `games.csv` (`nfldata` repo) | The schedule and closing Vegas lines (spread and over/under total) for every game. `predict` also uses it to find the next unplayed week and each team's opponent. |
 
 Each row is one player in one game. Only players with meaningful recent usage are modeled: a prior 8-game
@@ -74,6 +76,9 @@ All features use only information available **before** kickoff, so there is no l
 - **Vegas lines:** the team's point spread, the game's over/under total, each team's implied points
   (derived from the spread and total) and home/away. Lines capture expected game script: a big favorite tends to
   run more late, and a team expected to trail tends to pass more.
+- **Injuries** (`nfl_yards/injuries.py`): the player's own game status and practice participation; the recent
+  target and carry share of teammates ruled Out or Doubtful (volume someone else has to absorb); and the recent
+  snap share of the opponent's defensive backs and front seven who are ruled Out or Doubtful.
 - **Other:** position and week of the season.
 
 ### Expected yards (`nfl_yards/expected.py`)
@@ -117,9 +122,9 @@ refit on both. Seasons after 2024 (2025 and the 2026 weeks played so far) are th
 
 | Yard type | RMSE model | RMSE baseline | MAE model | MAE baseline |
 |---|---|---|---|---|
-| Passing | 81.7 | 89.1 | 64.7 | 70.2 |
-| Rushing | 28.9 | 30.2 | 21.2 | 22.5 |
-| Receiving | 27.7 | 28.8 | 20.8 | 21.8 |
+| Passing | 81.7 | 89.1 | 64.6 | 70.2 |
+| Rushing | 28.7 | 30.2 | 21.1 | 22.5 |
+| Receiving | 27.6 | 28.8 | 20.8 | 21.8 |
 
 Average bias (prediction minus actual), before and after calibration: passing +8.1 → +1.5 yards overall;
 receiving's top 2% by recent form −7.5 → −3.1.
@@ -128,8 +133,8 @@ receiving's top 2% by recent form −7.5 → −3.1.
 
 | Yard type | Model | Base rate |
 |---|---|---|
-| Passing | 0.448 | 0.518 |
-| Rushing | 0.378 | 0.481 |
+| Passing | 0.450 | 0.518 |
+| Rushing | 0.377 | 0.481 |
 | Receiving | 0.364 | 0.442 |
 
 The probabilities are well calibrated: across the test set, outcomes predicted at 30% happen about 25-35% of the
@@ -139,8 +144,9 @@ time, and similarly across other probability ranges. Full metrics, including the
 ## Limitations
 
 - Weekly yardage is noisy. The gain over a rolling average is modest, and individual predictions can miss widely.
-- The model does not see injuries, depth charts or weather, so a backup who is about to start, or a star who is
-  out, will be mispredicted.
+- The model does not see depth charts or weather. Injuries come from the weekly report only: players on injured
+  reserve aren't listed, so their absence isn't counted, and for Sunday games the report isn't final until Friday.
+- Predictions are only as current as the last run. Rerun `predict` after the final injury report.
 - Vegas lines for upcoming games appear in the schedule about a week ahead. Predicting further out leaves them
   missing, which the models handle but with less accuracy.
 - The very top of the range is still uncertain: there are only a few dozen test games per yard type for the
